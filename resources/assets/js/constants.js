@@ -419,5 +419,5 @@ var SENSOR_UNITS =
 	'uvIndex':'',
 	'visibility':'km',
 	'ozone':'DU',
-	alarm_State: '',
+	alarm_state: '',
 }
