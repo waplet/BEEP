@@ -201,7 +201,7 @@ fieldset .form-item, .tab-content .form-item{
 .icn.bee, .icn.sound_flying_adult, .icn.s_fly_a, .icn.bee_count_in, .icn.bee_count_out, .icn.bc_i, .icn.bc_o {
 	background-image:url(/img/icn_bee.svg);
 }
-.icn.alert {
+.icn.alert, .icn.alarm_state {
 	background-image:url(/img/icn_alert.svg);
 }
 .icn.air_pressure, .icn.p, .icn.lat, .icn.lon {
