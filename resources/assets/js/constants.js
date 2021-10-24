@@ -229,7 +229,7 @@ var SENSOR_MIN =
 	snr 	: -20, 
 	lat 	: 0, 
 	lon 	: 0,
-	alarm_state: 0,
+	alarm_state: -0.1, // So that zero is also shown
 };
 
 var SENSOR_LOW =
