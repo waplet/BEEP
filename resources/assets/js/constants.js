@@ -6,6 +6,7 @@
 var LANG 					= [];
 var API_URL           	    = (document.URL.indexOf('beep.test') > -1) ? 'https://beep.test/api/' : (document.URL.indexOf('test.beep.nl') > -1) ? 'https://test.beep.nl/api/' : 'https://api.beep.nl/api/';
 //var API_URL 				= 'https://api.beep.nl/api/';
+var API_URL = 'http://84.15.136.217:7780/api/';
 var CONNECTION_FREQ_REMOTE  = ((60)*1000);
 
 var COLORS = 
@@ -110,6 +111,7 @@ var SENSOR_COLOR = {
 	'uvIndex': COLORS.pink,
 	'visibility': COLORS.lightgrey2,
 	'ozone': COLORS.lightgrey,
+	alarm_state: COLORS.lightgrey,
 }
 
 var SENSOR_NAMES =
@@ -190,7 +192,8 @@ var SENSOR_NAMES =
 	'cloudCover': 'cloudCover',
 	'uvIndex': 'uvIndex',
 	'visibility': 'visibility',
-	'ozone': 'ozone'
+	'ozone': 'ozone',
+	alarm_state: 'alarmState',
 };
 
 var SENSOR_MIN =
@@ -225,7 +228,8 @@ var SENSOR_MIN =
 	rssi	: -200,
 	snr 	: -20, 
 	lat 	: 0, 
-	lon 	: 0, 
+	lon 	: 0,
+	alarm_state: 0,
 };
 
 var SENSOR_LOW =
@@ -260,7 +264,8 @@ var SENSOR_LOW =
 	rssi	: -120,
 	snr 	: -10, 
 	lat 	: 0, 
-	lon 	: 0, 
+	lon 	: 0,
+	alarm_state: 0,
 };
 
 var SENSOR_HIGH =
@@ -295,7 +300,8 @@ var SENSOR_HIGH =
 	rssi	: -50,
 	snr 	: 15, 
 	lat 	: 180, 
-	lon 	: 180, 
+	lon 	: 180,
+	alarm_state: 0,
 };
 
 var SENSOR_MAX =
@@ -330,7 +336,8 @@ var SENSOR_MAX =
 	rssi	: -40,
 	snr 	: 20, 
 	lat 	: 180, 
-	lon 	: 180, 
+	lon 	: 180,
+	alarm_state: 0,
 };
 
 var SENSOR_UNITS =
@@ -412,4 +419,5 @@ var SENSOR_UNITS =
 	'uvIndex':'',
 	'visibility':'km',
 	'ozone':'DU',
+	alarm_State: '',
 }

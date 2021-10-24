@@ -334,6 +334,7 @@
     'uvIndex'               : 'UV index',
     'visibility'            : 'Visibility',
     'ozone'                 : 'Ozone',
+    alarm_state             : 'Alarm state',
 
     /* Measurements */
     hour                    : 'Hour',
