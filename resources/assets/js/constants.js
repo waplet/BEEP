@@ -265,7 +265,7 @@ var SENSOR_LOW =
 	snr 	: -10, 
 	lat 	: 0, 
 	lon 	: 0,
-	alarm_state: 0,
+	alarm_state: 0.5, // Lower than LOW => yellow
 };
 
 var SENSOR_HIGH =
@@ -301,7 +301,7 @@ var SENSOR_HIGH =
 	snr 	: 15, 
 	lat 	: 180, 
 	lon 	: 180,
-	alarm_state: 1,
+	alarm_state: 1, // Higher than HIGH would be red, so should never reach this state
 };
 
 var SENSOR_MAX =
