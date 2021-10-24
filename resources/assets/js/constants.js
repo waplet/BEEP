@@ -301,7 +301,7 @@ var SENSOR_HIGH =
 	snr 	: 15, 
 	lat 	: 180, 
 	lon 	: 180,
-	alarm_state: 0,
+	alarm_state: 1,
 };
 
 var SENSOR_MAX =
@@ -337,7 +337,7 @@ var SENSOR_MAX =
 	snr 	: 20, 
 	lat 	: 180, 
 	lon 	: 180,
-	alarm_state: 0,
+	alarm_state: 1,
 };
 
 var SENSOR_UNITS =
