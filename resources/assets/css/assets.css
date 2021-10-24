@@ -163,7 +163,7 @@ ul.sensor {
 .icn.bee, .icn.sound_flying_adult, .icn.bee_count_in, .icn.bee_count_out {
 	background-image:url(/img/icn_bee.svg);
 }
-.icn.alert {
+.icn.alert, .icn.alarm_state {
 	background-image:url(/img/icn_alert.svg);
 }
 .icn.air_pressure, .icn.lat, .icn.lon {
