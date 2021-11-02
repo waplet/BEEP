@@ -115,7 +115,7 @@ return [
         //'lag'         => ['name' => 'Langi',                  'script' => 'Latn', 'native' => 'Kɨlaangi', 'regional' => ''],
         //'lah'         => ['name' => 'Lahnda',                 'script' => 'Latn', 'native' => 'Lahnda', 'regional' => ''],
         //'la'          => ['name' => 'Latin',                  'script' => 'Latn', 'native' => 'latine', 'regional' => ''],
-        //'lv'          => ['name' => 'Latvian',                'script' => 'Latn', 'native' => 'latviešu', 'regional' => 'lv_LV'],
+        'lv'          => ['name' => 'Latvian',                'script' => 'Latn', 'native' => 'latviešu', 'regional' => 'lv_LV'],
         //'to'          => ['name' => 'Tongan',                 'script' => 'Latn', 'native' => 'lea fakatonga', 'regional' => ''],
         //'lt'          => ['name' => 'Lithuanian',             'script' => 'Latn', 'native' => 'lietuvių', 'regional' => 'lt_LT'],
         //'li'          => ['name' => 'Limburgish',             'script' => 'Latn', 'native' => 'Limburgs', 'regional' => 'li_BE'],
