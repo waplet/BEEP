@@ -77,7 +77,7 @@ return [
     'unit'          => 'mērvienība',
     'Source'        => 'Informācijas avots',
     'Icon'          => 'Ikona',
-    'No'            => 'Nr.p.k.',
+    'No'            => 'Nē',
     'Yes'           => 'Jā',
     'Measurements'  => 'Sensoru mērījumi',
     'Error'         => 'Kļūda',
