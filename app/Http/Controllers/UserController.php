@@ -104,8 +104,10 @@ class UserController extends Controller
             $input['avatar'] = Storage::disk($storage)->url('avatars/default.jpg');
         }
 
+        /** @var User $user */
         $user = User::create($input);
-        
+        $user->markEmailAsVerified();
+
         // Handle role assignment, only store permitted role
         if ($request->filled('roles'))
         {

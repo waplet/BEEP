@@ -13,7 +13,6 @@ use Validator;
 use Hash;
 use Auth;
 use Password;
-use Login;
 use Storage;
 
 /**
@@ -162,6 +161,7 @@ class UserController extends Controller
             ];
 
             // save the user
+            /** @var User $user */
             $user             = User::create($user_data);
 
             // add the standard checklist 
@@ -170,13 +170,12 @@ class UserController extends Controller
             $checklistFactory->createUserChecklist($user, $check);
 
             // set the response data
-            if($user) 
-            {
-                $user->sendApiEmailVerificationNotification();
-                return Response::json(['email_verification_sent'], 201);
-            } 
-            else
-            {
+            if ($user) {
+                // $user->sendApiEmailVerificationNotification();
+                // return Response::json(['email_verification_sent'], 201);
+                $user->markEmailAsVerified();
+                return Response::json(['successfully_registered'], 201);
+            } else {
                 return Response::json('could_not_create_user', 500);
             }
         }
