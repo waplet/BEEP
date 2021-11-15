@@ -1,5 +1,6 @@
 <?php
 namespace App\Http\Controllers\Api;
+use App\Services\PollihubTTNDownlinkService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Auth;
@@ -387,7 +388,7 @@ class DeviceController extends Controller
             $device_exists += Device::where('id', $id)->count();
             $can_claim += Auth::user()->devices->where('id', $id)->count();
         }
-        
+
         if (isset($key))
         {
             $device_exists += Device::where('key', $key)->count();
@@ -811,5 +812,78 @@ class DeviceController extends Controller
         }
 
         return null;
-    }   
+    }
+
+    public function postToggleAlarm(Request $request, $id)
+    {
+        /** @var User $user */
+        $user = $request->user();
+        /**
+         * TODO: Maybe use @see User::allDevices()->find($id);
+         * @var Device $device
+         */
+        $device = $user->devices()->find($id);
+
+        if (!$device) {
+            return Response::json('no_devices_found', 404);
+        }
+
+        $categoryId = Category::findCategoryIdByRootParentAndName('hive', 'sensor', 'pollihub');
+        if (!$categoryId) {
+            return Response::json('pollihub_sensortype_missing', 500);
+        }
+
+        if ($device->category_id !== $categoryId) {
+            return Response::json('pollihub_downlink_unsupported_for_device', 500);
+        }
+
+        /** @var PollihubTTNDownlinkService $downlinkService */
+        $downlinkService = app(PollihubTTNDownlinkService::class);
+
+        try {
+            $downlinkService->setAlarm($device->key);
+        } catch (RequestException $e) {
+            \Log::error($e);
+            Response::json("pollihub_downlink_error", 500);
+        }
+
+        return Response::json("pollihub_alarm_toggled");
+    }
+
+    public function postToggleLed(Request $request, $id)
+    {
+        /** @var User $user */
+        $user = $request->user();
+        /**
+         * TODO: Maybe use @see User::allDevices()->find($id);
+         * @var Device $device
+         */
+        $device = $user->devices()->find($id);
+
+        if (!$device) {
+            return Response::json('no_devices_found', 404);
+        }
+
+        $categoryId = Category::findCategoryIdByRootParentAndName('hive', 'sensor', 'pollihub');
+        if (!$categoryId) {
+            return Response::json('pollihub_sensortype_missing', 500);
+        }
+
+        if ($device->category_id !== $categoryId) {
+            return Response::json('pollihub_downlink_unsupported_for_device', 500);
+        }
+
+        /** @var PollihubTTNDownlinkService $downlinkService */
+        $downlinkService = app(PollihubTTNDownlinkService::class);
+
+        try {
+            $downlinkService->setLed($device->key);
+        } catch (RequestException $e) {
+            \Log::error($e);
+            Response::json("pollihub_downlink_error", 500);
+        }
+
+        return Response::json("pollihub_led_toggled");
+    }
+
 }

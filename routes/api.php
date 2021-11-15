@@ -59,6 +59,8 @@ Route::group([], function()
 		Route::get('devices/ttn/{dev_id}',  'Api\DeviceController@getTTNDevice');
 		Route::post('devices/ttn/{dev_id}', 'Api\DeviceController@postTTNDevice');
 		Route::post('devices/tts/{step}/{dev_id}/{dev_eui}/{app_key}', 'Api\DeviceController@debugTtsDevice');
+        Route::post('devices/ttn/{id}/toggle_alarm', 'Api\DeviceController@postToggleAlarm');
+        Route::post('devices/ttn/{id}/toggle_led', 'Api\DeviceController@postToggleLed');
 		Route::get('sensors/measurements', 	'Api\MeasurementController@data');
 		Route::get('sensors/lastvalues', 	'Api\MeasurementController@lastvalues');
 		Route::get('sensors/lastweight', 	'Api\MeasurementController@lastweight');
