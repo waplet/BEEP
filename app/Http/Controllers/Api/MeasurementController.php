@@ -221,7 +221,7 @@ class MeasurementController extends Controller
                     $battery_voltage = $battery_voltage / 1000;
                 
                 $device = $this->storeDeviceMeta($device, 'battery_voltage', $battery_voltage);
-            } 
+            }
             if (isset($data_array['beep_base']) && boolval($data_array['beep_base']) && isset($data_array['hardware_id'])) // store hardware id
             {
                 $device = $this->storeDeviceMeta($device, 'hardware_id', $data_array['hardware_id']);
@@ -237,6 +237,9 @@ class MeasurementController extends Controller
                     $device = $this->storeDeviceMeta($device, 'bootcount', $data_array['bootcount']);
                 if (isset($data_array['time_device']))
                     $device = $this->storeDeviceMeta($device, 'time_device', $data_array['time_device']);
+            }
+            if (isset($data_array['alarm_state'])) {
+                $device = $this->storeDeviceMeta($device, 'alarm_state', $data_array['alarm_state']);
             }
             // store metadata from sensor
             $device->last_message_received = date('Y-m-d H:i:s');
