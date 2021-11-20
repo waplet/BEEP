@@ -1,6 +1,8 @@
 <?php
 namespace App\Http\Controllers\Api;
 
+use App\Location;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Auth;
@@ -1025,5 +1027,161 @@ class MeasurementController extends Controller
             return Response::json('sensor-none-error', 500);
 
         return Response::json( ['id'=>$device->id, 'interval'=>$interval, 'index'=>$index, 'timeGroup'=>$timeGroup, 'resolution'=>$resolution, 'measurements'=>$sensors_out, 'sensorDefinitions'=>$sensorDefinitions, 'cacheSensorNames'=>$cache_sensor_names] );
+    }
+
+    /**
+     * @param Request $request
+     * @return Location|null|Model
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    protected function get_user_location(Request $request)
+    {
+        $this->validate($request, [
+            'id' => 'integer|exists:locations,id',
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        return $user->locations()->find($request->input('id'));
+    }
+
+    /**
+     * GET sensors/multi_measurements
+     * Similar to data()
+     * 1. Gather all device by request (device_ids, apiary (location), etc.)
+     * 2. Gather required sensor names
+     * 3. Return data grouped by devices
+     */
+    public function multiData(Request $request)
+    {
+        $this->cacheRequestRate('get-measurements');
+
+        $location = $this->get_user_location($request);
+        $names = array_keys($this->valid_sensors);
+        // TODO: How to find sensors
+        $sensors = ["t", "h"];
+
+        if (!$location) {
+            return Response::json('no_devices_found', 404);
+        }
+
+        // TODO: add sensor definitions
+
+        // select appropriate interval
+        $deviceMaxResolutionMinutes = 1;
+        if (isset($device->measurement_interval_min)) {
+            $deviceMaxResolutionMinutes = $device->measurement_interval_min * max(1,$device->measurement_transmission_ratio);
+        }
+
+        $interval  = $request->input('interval','day');
+        $index     = intval($request->input('index',0));
+        $timeGroup = $request->input('timeGroup','day');
+        $timeZone  = $request->input('timezone','UTC');
+
+        $durationInterval = $interval.'s';
+        $requestInterval  = $interval;
+        $resolution       = null;
+        $staTimestamp = new Moment();
+        $staTimestamp->setTimezone($timeZone);
+        $endTimestamp = new Moment();
+        $endTimestamp->setTimezone($timeZone);
+
+        $cache_sensor_names = $index < 7;
+
+        // Setup date range
+        switch ($interval) {
+            case 'year':
+                $resolution = '1d';
+                $staTimestamp->subtractYears($index);
+                $endTimestamp->subtractYears($index);
+                $cache_sensor_names = false;
+                break;
+            case 'month':
+                $resolution = $deviceMaxResolutionMinutes > 180 ? $deviceMaxResolutionMinutes.'m' : '3h';
+                $staTimestamp->subtractMonths($index);
+                $endTimestamp->subtractMonths($index);
+                $cache_sensor_names = false;
+                break;
+            case 'week':
+                $requestInterval = 'week';
+                $resolution = $deviceMaxResolutionMinutes > 60 ? $deviceMaxResolutionMinutes.'m' : '1h';
+                $staTimestamp->subtractWeeks($index);
+                $endTimestamp->subtractWeeks($index);
+                $cache_sensor_names = false;
+                break;
+            case 'day':
+                $resolution = $deviceMaxResolutionMinutes > 10 ? $deviceMaxResolutionMinutes.'m' : '10m';
+                $staTimestamp->subtractDays($index);
+                $endTimestamp->subtractDays($index);
+                break;
+            case 'hour':
+                $resolution = $deviceMaxResolutionMinutes > 2 ? $deviceMaxResolutionMinutes.'m' : '2m';
+                $staTimestamp->subtractHours($index);
+                $endTimestamp->subtractHours($index);
+                break;
+        }
+
+        $measurements = [];
+
+        $staTimestampString = $staTimestamp->startOf($requestInterval)->setTimezone('UTC')->format($this->timeFormat);
+        $endTimestampString = $endTimestamp->endOf($requestInterval)->setTimezone('UTC')->format($this->timeFormat);
+        $groupBySelect        = null;
+        $groupBySelectWeather = null;
+        $groupByResolution  = '';
+        $limit              = 'LIMIT ' . $this->maxDataPoints;
+
+        $devices = $location->devices()->get();
+        $devicesKeyOrs = $devices->map(function (Device $device) {
+            return $device->key;
+        })->map(function ($key) {
+            return '"key" = '. "'" . $key . "'";
+        })->join(" OR ");
+        $devicesKeyMapping = $devices->mapWithKeys(function (Device $device) {
+            return [$device->key => $device->id];
+        });
+
+        $whereKeyAndTime = "($devicesKeyOrs) AND time >= '" . $staTimestampString . "' AND time <= '" . $endTimestampString . "'";
+
+        if ($resolution !== null) {
+            $fill = env('INFLUX_FILL', 'null');
+            $groupByResolution = 'GROUP BY time(' . $resolution . '),"key" fill(' . $fill . ')';
+
+            $groupBySelect = collect($sensors)
+                ->map(function ($sensorName) {
+                    return 'MEAN("' . $sensorName . '") as "' . $sensorName . '"';
+                })
+                ->implode(", ");
+        }
+
+        if ($groupBySelect !== null) {
+            $sensorQuery = sprintf(
+                "SELECT %s from \"sensors\" WHERE %s %s %s",
+                $groupBySelect,
+                $whereKeyAndTime,
+                $groupByResolution,
+                $limit
+            );
+
+            $measurements = Device::getInfluxQuery($sensorQuery, 'multi_data');
+        }
+
+        // TODO: We are not adding weather sensors
+        //  And probably would need to skip sound sensors
+
+        return Response::json(
+            [
+                'id' => $location->id,
+                'interval' => $interval,
+                'index' => $index,
+                'timeGroup' => $timeGroup,
+                'resolution' => $resolution,
+                'measurements' => $measurements,
+                'sensorDefinitions' => [],
+                'cacheSensorNames' => false,
+                'sensors' => $sensors,
+                'devicesKeyMapping' => $devicesKeyMapping,
+            ]
+        );
     }
 }

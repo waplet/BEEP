@@ -62,6 +62,7 @@ Route::group([], function()
         Route::post('devices/ttn/{id}/toggle_alarm', 'Api\DeviceController@postToggleAlarm');
         Route::post('devices/ttn/{id}/toggle_led', 'Api\DeviceController@postToggleLed');
 		Route::get('sensors/measurements', 	'Api\MeasurementController@data');
+		Route::get('sensors/multi_measurements', 	'Api\MeasurementController@multiData');
 		Route::get('sensors/lastvalues', 	'Api\MeasurementController@lastvalues');
 		Route::get('sensors/lastweight', 	'Api\MeasurementController@lastweight');
 		Route::post('sensors/calibrateweight','Api\MeasurementController@calibrateweight');
