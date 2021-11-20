@@ -1134,8 +1134,12 @@ class MeasurementController extends Controller
         $devices = $location->devices()->get();
         $devicesKeyOrs = $devices->map(function (Device $device) {
             return $device->key;
-        })->map(function ($key) {
-            return '"key" = '. "'" . $key . "'";
+        })->flatMap(function ($key) {
+            // Somehow it saves sensor with different key casing
+            return [
+                '"key" = '. "'" . $key . "'",
+                '"key" = '. "'" . strtoupper($key) . "'",
+            ];
         })->join(" OR ");
         $devicesKeyMapping = $devices->mapWithKeys(function (Device $device) {
             return [$device->key => $device->id];
