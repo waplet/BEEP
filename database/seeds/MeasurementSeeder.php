@@ -57,7 +57,8 @@ class MeasurementSeeder extends Seeder
             'w_fr_offset'        => 'w_fr_offset',    
             'w_bl_offset'        => 'w_bl_offset',    
             'w_br_offset'        => 'w_br_offset',
-            'alarm_state'        => 'alarmState',
+            'alarm_state'        => 'alarm_state',
+            'button_state'       => 'button_state',
     ];
     protected $output_sensors = [
             't',
@@ -90,6 +91,7 @@ class MeasurementSeeder extends Seeder
             's_bin488_537Hz',
             's_bin537_586Hz',
             'alarm_state',
+            'button_state',
         ];
 
     public function run()
