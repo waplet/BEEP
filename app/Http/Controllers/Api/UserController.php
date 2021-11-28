@@ -249,11 +249,6 @@ class UserController extends Controller
         // get the response
         switch ($reset)
         {
-            case Password::INVALID_PASSWORD:
-                $code     = 400;
-                $response = array('message' => 'invalid_password');
-              break;
-
             case Password::INVALID_TOKEN:
                 $code     = 400;
                 $response = array('message' => 'invalid_token');
@@ -262,6 +257,11 @@ class UserController extends Controller
             case Password::INVALID_USER:
                 $code     = 400;
                 $response = array('message' => 'invalid_user');
+              break;
+
+            case Password::RESET_LINK_SENT:
+                $code     = 200;
+                $response = array('message' => 'reminder_sent');
               break;
 
             case Password::PASSWORD_RESET:
