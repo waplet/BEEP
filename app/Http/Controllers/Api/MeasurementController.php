@@ -502,7 +502,7 @@ class MeasurementController extends Controller
 
         if($device)
         {
-            if ($field != null && $value != null)
+            if ($field != null && !is_null($value))
             {
                 switch($field)
                 {
