@@ -854,7 +854,12 @@ class DeviceController extends Controller
         $downlinkService = app(PollihubTTNDownlinkService::class);
 
         try {
-            $downlinkService->setAlarm($device->key);
+            if ($device->alarm_state) {
+                $downlinkService->unsetAlarm($device->key);
+            } else {
+                $downlinkService->setAlarm($device->key);
+            }
+            
         } catch (RequestException $e) {
             \Log::error($e);
             Response::json("pollihub_downlink_error", 500);

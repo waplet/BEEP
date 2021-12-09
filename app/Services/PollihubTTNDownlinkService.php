@@ -29,14 +29,20 @@ class PollihubTTNDownlinkService
 
     public function setAlarm(string $deviceId): void
     {
+        // 0x01
+        $this->sendRequest($deviceId, base64_encode(chr(0x01)));
+    }
+    
+    public function unsetAlarm(string $deviceId): void
+    {
         // 0x02
-        $this->sendRequest($deviceId, "Ag==");
+        $this->sendRequest($deviceId, base64_encode(chr(0x02)));
     }
 
     public function setLed(string $deviceId): void
     {
-        // 0x01
-        $this->sendRequest($deviceId, "AQ==");
+        // 0x03
+        $this->sendRequest($deviceId, base64_encode(0x03));
     }
 
     protected function sendRequest(string $deviceId, string $base64Payload): void
