@@ -980,7 +980,12 @@ class MeasurementController extends Controller
                 $queryList         = Device::getAvailableSensorNamesFromData($device->id, $names, $whereKeyAndTime, 'sensors', true, $cache_sensor_names);
 
                 foreach ($queryList as $i => $name) 
-                    $queryList[$i] = 'MEAN("'.$name.'") AS "'.$name.'"';
+                    // For alarm state return max value in a period of a time
+                    if ($name == 'alarm_state') {
+                        $queryList[$i] = 'MAX("' . $name . '") AS "' . $name . '"';
+                    } else {
+                        $queryList[$i] = 'MEAN("'.$name.'") AS "'.$name.'"';
+                    }
                 
                 $groupBySelect = implode(', ', $queryList);
             }
