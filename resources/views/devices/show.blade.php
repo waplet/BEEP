@@ -153,7 +153,7 @@
                                 <th>DB rows / % of log</th>
                                 <th>DB request from</th>
                                 <th>Length (days)</th>
-                                <th>Interval : ratio (min)</th>
+                                <th>Interval : send ratio (min)</th>
                                 <th>Start time match</th>
                                 <th>End time match</th>
                                 <th>Matches / Number of measurements</th>
@@ -180,10 +180,10 @@
                                         $td_attr = ' style="color:#999"';
 
                                     // interval calculation
-                                    if ($interval_m)
+                                    if ($interval_m && $interval_m > 0)
                                     {
                                         $meas_p_day = round(24 * 60 / $interval_m);
-                                        $data_days  = round($bl['duration_hours']/$meas_p_day, 1);
+                                        $data_days  = round($bl['duration_hours']/24, 1);
                                     }
                                 @endphp
                                 <tr>
