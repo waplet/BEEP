@@ -45,6 +45,12 @@ class PollihubTTNDownlinkService
         $this->sendRequest($deviceId, base64_encode(0x03));
     }
 
+    public function unsetLed(string $deviceId): void
+    {
+        // 0x04
+        $this->sendRequest($deviceId, base64_encode(0x04));
+    }
+
     protected function sendRequest(string $deviceId, string $base64Payload): void
     {
         $this->client->request(
