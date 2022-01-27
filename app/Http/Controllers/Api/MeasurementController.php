@@ -1171,6 +1171,22 @@ class MeasurementController extends Controller
     {
         $this->cacheRequestRate('get-measurements');
 
+        $validator = Validator::make($request->all(), [
+            'id'     => 'nullable|integer|exists:hives,id',
+            'start'       => 'required_without:index|date',
+            'end'         => 'required_without:index|date',
+            'index'       => 'required_without:start|required_with:interval|integer',
+            'interval'    => 'nullable|string',
+            'timeGroup'   => 'nullable|string',
+            'names'       => 'nullable|string',
+            'weather'     => 'nullable|integer',
+            'timezone'    => 'nullable|timezone',
+            'relative_interval' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails())
+            return response()->json(['errors'=>$validator->errors()]);
+
         $location = $this->get_user_location($request);
         $names = array_keys($this->valid_sensors);
         // TODO: How to find sensors
@@ -1188,62 +1204,25 @@ class MeasurementController extends Controller
             $deviceMaxResolutionMinutes = $device->measurement_interval_min * max(1,$device->measurement_transmission_ratio);
         }
 
-        $interval  = $request->input('interval','day');
-        $index     = intval($request->input('index',0));
-        $timeGroup = $request->input('timeGroup','day');
+        $relative_interval = boolval($request->input('relative_interval', 0));
+        $intervalArr = $this->interval($request, $relative_interval);
+        
         $timeZone  = $request->input('timezone','UTC');
-
-        $durationInterval = $interval.'s';
-        $requestInterval  = $interval;
-        $resolution       = null;
-        $staTimestamp = new Moment();
-        $staTimestamp->setTimezone($timeZone);
-        $endTimestamp = new Moment();
-        $endTimestamp->setTimezone($timeZone);
-
-        $cache_sensor_names = $index < 7;
-
-        // Setup date range
-        switch ($interval) {
-            case 'year':
-                $resolution = '1d';
-                $staTimestamp->subtractYears($index);
-                $endTimestamp->subtractYears($index);
-                $cache_sensor_names = false;
-                break;
-            case 'month':
-                $resolution = $deviceMaxResolutionMinutes > 180 ? $deviceMaxResolutionMinutes.'m' : '3h';
-                $staTimestamp->subtractMonths($index);
-                $endTimestamp->subtractMonths($index);
-                $cache_sensor_names = false;
-                break;
-            case 'week':
-                $requestInterval = 'week';
-                $resolution = $deviceMaxResolutionMinutes > 60 ? $deviceMaxResolutionMinutes.'m' : '1h';
-                $staTimestamp->subtractWeeks($index);
-                $endTimestamp->subtractWeeks($index);
-                $cache_sensor_names = false;
-                break;
-            case 'day':
-                $resolution = $deviceMaxResolutionMinutes > 10 ? $deviceMaxResolutionMinutes.'m' : '10m';
-                $staTimestamp->subtractDays($index);
-                $endTimestamp->subtractDays($index);
-                break;
-            case 'hour':
-                $resolution = $deviceMaxResolutionMinutes > 2 ? $deviceMaxResolutionMinutes.'m' : '2m';
-                $staTimestamp->subtractHours($index);
-                $endTimestamp->subtractHours($index);
-                break;
-        }
 
         $measurements = [];
 
-        $staTimestampString = $staTimestamp->startOf($requestInterval)->setTimezone('UTC')->format($this->timeFormat);
-        $endTimestampString = $endTimestamp->endOf($requestInterval)->setTimezone('UTC')->format($this->timeFormat);
         $groupBySelect        = null;
-        $groupBySelectWeather = null;
         $groupByResolution  = '';
         $limit              = 'LIMIT ' . $this->maxDataPoints;
+        $relative_interval = $intervalArr['relative_interval'];
+        $resolution = $intervalArr['resolution'];
+        $cache_sensor_names = $intervalArr['cacheSensorNames'];
+        $start_date = $intervalArr['start'];
+        $end_date = $intervalArr['end'];
+        $interval = $intervalArr['interval'];
+        $index = $intervalArr['index'];
+        $timeGroup = $intervalArr['timeGroup'];
+        $timeZone = $intervalArr['timeZone'];
 
         $devices = $location->devices()->get();
         $devicesKeyOrs = $devices->map(function (Device $device) {
@@ -1259,7 +1238,7 @@ class MeasurementController extends Controller
             return [$device->key => $device->id];
         });
 
-        $whereKeyAndTime = "($devicesKeyOrs) AND time >= '" . $staTimestampString . "' AND time <= '" . $endTimestampString . "'";
+        $whereKeyAndTime = "($devicesKeyOrs) AND time >= '" . $start_date . "' AND time <= '" . $end_date . "'";
 
         if ($resolution !== null) {
             $fill = env('INFLUX_FILL', 'null');
@@ -1299,6 +1278,7 @@ class MeasurementController extends Controller
                 'cacheSensorNames' => false,
                 'sensors' => $sensors,
                 'devicesKeyMapping' => $devicesKeyMapping,
+                'relative_interval' => $relative_interval,
             ]
         );
     }
