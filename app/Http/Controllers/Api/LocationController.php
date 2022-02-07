@@ -2,14 +2,19 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Device;
 use App\Location;
 use App\Continent;
 use App\Category;
 use App\HiveFactory;
+use App\Services\PollihubTTNDownlinkService;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Request;
 use App\Http\Requests\PostLocationRequest;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Response;
 
 use Validator;
 
@@ -160,5 +165,92 @@ class LocationController extends Controller
     {
         $location = $request->user()->locations()->findOrFail($location->id);
         $location->delete();
+    }
+    
+    public function postEnableAlarm(Request $request, Location $location)
+    {
+        $location = $request->user()->locations()->findOrFail($location->id);
+
+        /** @var Collection|Device[] $devices */
+        $devices = $location->devices()->get();
+        
+        if ($devices->isEmpty()) {
+            return response()->json('no_devices_found', 404);
+        }
+
+        $categoryId = Category::findCategoryIdByRootParentAndName('hive', 'sensor', 'pollihub');
+        if (!$categoryId) {
+            return response()->json('pollihub_sensortype_missing', 500);
+        }
+        
+        $devices = $devices->filter(function (Device $device) use ($categoryId) {
+            return $device->category_id === $categoryId;  
+        });
+
+        if ($devices->isEmpty()) {
+            return response()->json('no_devices_found', 404);
+        }
+
+        /** @var PollihubTTNDownlinkService $downlinkService */
+        $downlinkService = app(PollihubTTNDownlinkService::class);
+        $wasError = false;
+        foreach ($devices as $device) {
+            try {
+                $downlinkService->setAlarm($device->key);
+            } catch (RequestException $e) {
+                \Log::error($e);
+                $wasError = true;
+            }
+        }
+        
+        if ($wasError) {
+            return response()->json('pollihub_downlink_error', 500);
+        }
+        
+        return response()->json("pollihub_location_alarm_enabled");
+    }
+    
+    public function postDisableAlarm(Request $request, Location $location)
+    {
+        $location = $request->user()->locations()->findOrFail($location->id);
+
+        /** @var Collection|Device[] $devices */
+        $devices = $location->devices()->get();
+
+        if ($devices->isEmpty()) {
+            return response()->json('no_devices_found', 404);
+        }
+
+        $categoryId = Category::findCategoryIdByRootParentAndName('hive', 'sensor', 'pollihub');
+        if (!$categoryId) {
+            return response()->json('pollihub_sensortype_missing', 500);
+        }
+
+        $devices = $devices->filter(function (Device $device) use ($categoryId) {
+            return $device->category_id === $categoryId;
+        });
+
+        if ($devices->isEmpty()) {
+            return response()->json('no_devices_found', 404);
+        }
+
+        /** @var PollihubTTNDownlinkService $downlinkService */
+        $downlinkService = app(PollihubTTNDownlinkService::class);
+        $wasError = false;
+        foreach ($devices as $device) {
+            try {
+                $downlinkService->unsetAlarm($device->key);
+            } catch (RequestException $e) {
+                \Log::error($e);
+                // response()->json('pollihub_downlink_error', 500);
+                $wasError = true;
+            }
+        }
+
+        if ($wasError) {
+            return response()->json('pollihub_downlink_error', 500);
+        }
+
+        return response()->json("pollihub_location_alarm_enabled");
     }
 }

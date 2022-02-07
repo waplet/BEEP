@@ -62,6 +62,9 @@ Route::group([], function()
 		Route::post('devices/ttn/{dev_id}', 'Api\DeviceController@postTTNDevice');
         Route::post('devices/ttn/{id}/toggle_alarm', 'Api\DeviceController@postToggleAlarm');
         Route::post('devices/ttn/{id}/toggle_led', 'Api\DeviceController@postToggleLed');
+        
+        Route::post('locations/{location}/enable_alarm', 'Api\LocationController@postEnableAlarm');
+        Route::post('locations/{location}/disable_alarm', 'Api\LocationController@postDisableAlarm');
 
 		Route::get('sensors/measurements', 	'Api\MeasurementController@data');
 		Route::get('sensors/multi_measurements', 	'Api\MeasurementController@multiData');
