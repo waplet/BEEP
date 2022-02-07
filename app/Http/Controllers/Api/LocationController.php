@@ -251,6 +251,6 @@ class LocationController extends Controller
             return response()->json('pollihub_downlink_error', 500);
         }
 
-        return response()->json("pollihub_location_alarm_enabled");
+        return response()->json("pollihub_location_alarm_disabled");
     }
 }
