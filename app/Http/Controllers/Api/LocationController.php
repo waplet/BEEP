@@ -209,7 +209,7 @@ class LocationController extends Controller
         
         return response()->json("pollihub_location_alarm_enabled");
     }
-    
+
     public function postDisableAlarm(Request $request, Location $location)
     {
         $location = $request->user()->locations()->findOrFail($location->id);
