@@ -188,7 +188,7 @@ class LocationController extends Controller
         });
 
         if ($devices->isEmpty()) {
-            return response()->json('no_devices_found', 404);
+            return response()->json('pollihub_downlink_unsupported_for_device', 404);
         }
 
         /** @var PollihubTTNDownlinkService $downlinkService */
@@ -231,7 +231,7 @@ class LocationController extends Controller
         });
 
         if ($devices->isEmpty()) {
-            return response()->json('no_devices_found', 404);
+            return response()->json('pollihub_downlink_unsupported_for_device', 404);
         }
 
         /** @var PollihubTTNDownlinkService $downlinkService */
