@@ -50,7 +50,7 @@ class FlashLog extends Model
     }
     public function device()
     {
-        return $this->belongsTo(Device::class);
+        return $this->belongsTo(Device::class)->withTrashed();
     }
     public function user()
     {
@@ -93,7 +93,7 @@ class FlashLog extends Model
 
     public function getLogCacheName($fill=false, $show=false, $matches_min_override=null, $match_props_override=null, $db_records_override=null)
     {
-        return 'flashlog-'.$this->id.'-fill-'.$fill.'-show-'.$show.'-matches-'.$matches_min_override.'-props-'.$match_props_override.'-dbrecs-'.$db_records_override;
+        return 'flashlog-'.$this->id.'-fill-'.$fill.'-show-'.$show.'-matches-'.$matches_min_override.'-dbrecs-'.$db_records_override; // removed -props-'.$match_props_override.'
     }
 
     public function log($data='', $log_bytes=null, $save=true, $fill=false, $show=false, $matches_min_override=null, $match_props_override=null, $db_records_override=null, $save_override=false, $from_cache=true, $match_days_offset=0)
@@ -135,7 +135,20 @@ class FlashLog extends Model
         $sid    = $this->device_id; 
         $time   = date("YmdHis");
 
-        if ($data && isset($sid))
+        if (empty($data)) // get data from parsed flashlog file, or unparsed log_file
+        {
+            if (isset($this->log_file_parsed) && $from_cache)
+            {
+                $out = json_decode($this->getFileContent('log_file_parsed'), true);
+                $messages = count($out);
+            }
+
+            if (empty($out) && isset($this->log_file))
+                $data = $this->getFileContent('log_file');
+        }
+        
+        // parse the data
+        if (empty($out) && isset($data) && isset($sid))
         {
             $data    = preg_replace('/[\r\n|\r|\n]+|\)\(|FEFEFEFE/i', "\n", $data);
             // interpret every line as a standard LoRa message
@@ -614,6 +627,7 @@ class FlashLog extends Model
         $block_index     = $on['i'];
         $start_index     = $block_index+1;
         $interval        = intval($on['measurement_interval_min']); // transmission ratio is not of importance here, because log contains all measurements
+        $interval_sec    = $interval * 60; // transmission ratio is not of importance here, because log contains all measurements
 
         $db_moment       = new Moment($db_time);
         
@@ -623,14 +637,14 @@ class FlashLog extends Model
 
         // check if database query should be based on the device time, or the cached time from the 
         $use_device_time = false;
-        if (isset($flashlog[$start_index]['time_device']))   
+        if (isset($flashlog[$start_index]['time_device']) && intval($flashlog[$start_index]['time_device']) > 1546297200)   
         {
             $device_moment = new Moment($flashlog[$start_index]['time_device']);
             $device_time   = $device_moment->format($this->timeFormat);
             if ($device_time > $db_time)
             {
                 $db_time         = $device_time;
-                $db_moment       = new Moment($db_time);
+                $db_moment       = $device_moment;
                 $use_device_time = true;
             }
         }
@@ -664,7 +678,12 @@ class FlashLog extends Model
                 $match_first_time   = $match_first['db_sec'];
                 $match_last_time    = $match_last['db_sec'];
                 $match_total_count  = count($matches_arr);
-                $sec_diff_per_index = ($match_last_time - $match_first_time) / ($match_total_count-1);
+                $sec_diff_per_match = ($match_last_time - $match_first_time) / ($match_total_count-1);
+
+                if (abs($sec_diff_per_match - $interval_sec) > 120) // deviation is too far off
+                    $sec_diff_per_index = $interval_sec;
+                else
+                    $sec_diff_per_index = $sec_diff_per_match;
 
                 $matches_display    = array_slice($matches_arr, 0, $matches_min);
                 $matches['matches'] = $matches_display;
@@ -678,7 +697,7 @@ class FlashLog extends Model
                     // A match is found
                     $has_matches = true;
                     if ($show)
-                        $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$on['measurement_interval_min'], 'transmission_ratio'=>$on['measurement_transmission_ratio'], 'index_start'=>$block['index_start'], 'index_end'=>$block['index_end'], 'time_start'=>$block['time_start'], 'time_end'=>$block['time_end'], 'setCount'=>$block['setCount'], 'matches'=>$matches, 'dbCount'=>$block['dbCount'], 'interval_sec_db'=>$sec_diff_per_index, 'match_first_db_sec'=>$match_first_time, 'match_last_db_sec'=>$match_last_time, 'match_total_count'=>$match_total_count];
+                        $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$interval, 'transmission_ratio'=>$on['measurement_transmission_ratio'], 'index_start'=>$block['index_start'], 'index_end'=>$block['index_end'], 'time_start'=>$block['time_start'], 'time_end'=>$block['time_end'], 'setCount'=>$block['setCount'], 'matches'=>$matches, 'dbCount'=>$block['dbCount'], 'interval_sec_db'=>$sec_diff_per_index, 'match_first_db_sec'=>$match_first_time, 'match_last_db_sec'=>$match_last_time, 'match_total_count'=>$match_total_count];
 
                     $setCount += $block['setCount'];
                     $db_time  = $block['time_end'];
@@ -687,7 +706,7 @@ class FlashLog extends Model
                 else
                 {
                     if ($show)
-                        $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$on['measurement_interval_min'], 'transmission_ratio'=>$on['measurement_transmission_ratio']];
+                        $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$interval, 'transmission_ratio'=>$on['measurement_transmission_ratio']];
 
                     $db_time = $db_moment->addMinutes($duration_min)->format($this->timeFormat);
                 }
@@ -696,7 +715,7 @@ class FlashLog extends Model
             {
                 //die(print_r($matches));
                 if ($show)
-                    $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$on['measurement_interval_min'], 'transmission_ratio'=>$on['measurement_transmission_ratio'], 'no_matches'=>'fl_i and time of match not set', 'match'=>$matches];
+                    $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$interval, 'transmission_ratio'=>$on['measurement_transmission_ratio'], 'no_matches'=>'fl_i and time of match not set', 'match'=>$matches];
 
                 $db_time = $db_moment->addMinutes($duration_min)->format($this->timeFormat);
             }
@@ -704,7 +723,7 @@ class FlashLog extends Model
         else
         {
             if ($show)
-                $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$on['measurement_interval_min'], 'transmission_ratio'=>$on['measurement_transmission_ratio'], 'no_matches'=>$matches];
+                $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$interval, 'transmission_ratio'=>$on['measurement_transmission_ratio'], 'no_matches'=>$matches];
 
             $db_time = $db_moment->addMinutes($duration_min)->format($this->timeFormat);
         }

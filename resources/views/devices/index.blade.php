@@ -43,8 +43,6 @@
 
 		@slot('body')
 
-
-
 		<script type="text/javascript">
             $(document).ready(function() {
                 $("#table-sensors").DataTable(
@@ -61,36 +59,6 @@
                     ],
                 });
             });
-
-            function fallbackCopyTextToClipboard(text) {
-			  var textArea = document.createElement("textarea");
-			  textArea.value = text;
-			  textArea.style.position="fixed";  //avoid scrolling to bottom
-			  document.body.appendChild(textArea);
-			  textArea.focus();
-			  textArea.select();
-
-			  try {
-			    var successful = document.execCommand('copy');
-			    var msg = successful ? 'successful' : 'unsuccessful';
-			    console.log('Fallback: Copying text command was ' + msg);
-			  } catch (err) {
-			    console.error('Fallback: Oops, unable to copy', err);
-			  }
-
-			  document.body.removeChild(textArea);
-			}
-			function copyTextToClipboard(text) {
-			  if (!navigator.clipboard) {
-			    fallbackCopyTextToClipboard(text);
-			    return;
-			  }
-			  navigator.clipboard.writeText(text).then(function() {
-			    console.log('Async: Copying to clipboard was successful!');
-			  }, function(err) {
-			    console.error('Async: Could not copy text: ', err);
-			  });
-			}
         </script>
 
 			<table id="table-sensors" class="table table-striped">
@@ -105,11 +73,11 @@
 						<th><img src="/img/icn_bat.svg" style="width: 20px;"></th>
 						<th>Hardware version</th>
 						<th style="min-width: 100px;">Firmware version</th>
-						<th>Inerval (min) / ratio</th>
+						<th>Interval (min) / ratio</th>
 						<th>{{ __('general.User') }} / {{ __('beep.Hive') }}</th>
 						<th>Research</th>
 						<th>Last downlink result</th>
-						<th style="min-width: 100px;">{{ __('crud.actions') }}</th>
+						<th style="min-width: 120px;">{{ __('crud.actions') }}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -119,7 +87,7 @@
 						{{-- <td><button onclick="copyTextToClipboard('{{ $device->name }}\r\n{{ $device->hardware_id }}');">Copy</button></td> --}}
 						<td>{{ $device->name }}</td>
 						<td><label class="label label-default">{{ $device->type }}</label></td>
-						<td>{{ $device->key }} <span style="font-size: 10px">{{ isset($device->former_key_list) ? '(former: '.$device->former_key_list.')' : ''}}</span> / {{ $device->hardware_id }}</td>
+						<td>{{ $device->key }} <span style="font-size: 10px">{{ isset($device->former_key_list) ? '(former: '.str_replace(',', ', ', $device->former_key_list).')' : ''}}</span> / {{ $device->hardware_id }}</td>
 						<td>{{ $device->last_message_received }}</td>
 						<td>{{ isset($device->battery_voltage) ? $device->battery_voltage.' V' : '' }}</td>
 						<td><p style="font-size: 10px">{{ $device->hardware_version }}</p></td>
@@ -143,6 +111,8 @@
 					@endforeach
 				</tbody>
 			</table>
+
+			<div class="pagination-wrapper"> {!! $sensors->appends(request()->except('page'))->render() !!} </div>
 		@endslot
 	@endcomponent
 @endsection
