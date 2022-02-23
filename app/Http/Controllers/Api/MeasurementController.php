@@ -237,7 +237,7 @@ class MeasurementController extends Controller
                     $device = $this->addDeviceMeta($device, 'time_device', $data_array['time_device']);
             }
             if (isset($data_array['alarm_state'])) {
-                $device = $this->storeDeviceMeta($device, 'alarm_state', $data_array['alarm_state']);
+                $device = $this->addDeviceMeta($device, 'alarm_state', $data_array['alarm_state']);
             }
             // store metadata from sensor
             $device->last_message_received = date('Y-m-d H:i:s');
