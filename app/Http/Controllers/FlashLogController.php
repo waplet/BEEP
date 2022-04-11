@@ -33,9 +33,10 @@ class FlashLogController extends Controller
                 ->orWhere('log_file', 'LIKE', "%$keyword%")
                 ->orWhere('log_file_stripped', 'LIKE', "%$keyword%")
                 ->orWhere('log_file_parsed', 'LIKE', "%$keyword%")
+                ->orderByDesc('updated_at')
                 ->paginate($perPage);
         } else {
-            $flashlog = FlashLog::paginate($perPage);
+            $flashlog = FlashLog::orderByDesc('updated_at')->paginate($perPage);
         }
 
         return view('flash-log.index', compact('flashlog'));
@@ -90,8 +91,10 @@ class FlashLogController extends Controller
      *
      * @return \Illuminate\View\View
      */
-    public function parse($id)
+    public function parse(Request $request, $id)
     {
+        $fill_time= $request->filled('no_fill') && $request->input('no_fill') == 1 ? false : true;
+        $fill_sdef= $request->filled('no_sensor_def') && $request->input('no_sensor_def') == 1 ? false : true;
         $flashlog = FlashLog::findOrFail($id);
         $out      = [];
         if(isset($flashlog->log_file))
@@ -99,7 +102,8 @@ class FlashLogController extends Controller
             $data = $flashlog->getFileContent('log_file');
             if (isset($data))
             {
-                $res  = $flashlog->log($data, null, true, true);
+                // log($data='', $log_bytes=null, $save=true, $fill=false, $show=false, $matches_min_override=null, $match_props_override=null, $db_records_override=null, $save_override=false, $from_cache=true, $match_days_offset=0, $add_sensordefinitions=true)
+                $res  = $flashlog->log($data, null, true, $fill_time, false, null, null, null, false, false, $fill_sdef);
                 foreach ($res as $key => $value) {
                     $out[] = $key.'='.$value; 
                 }
