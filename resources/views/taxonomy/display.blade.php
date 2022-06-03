@@ -20,6 +20,22 @@
 
         @slot('body')
         <div class="row">
+            
+            <div class="col-sm-12">
+                <h4>
+                    {{__('general.Categories')}} ({{ $count }}) visual flat JSON basis. Items are sorted by {{ $locale_name }} translations. Categories fixed: {{ $fixed }}. 
+                    <button onclick="createVisual()">Create visual</button>
+                </h4>
+                <textarea id="visual_data_source" onload="createVisual()" rows="20" style="width: 100%">{!! $catsJson !!}</textarea>
+            </div>
+
+            <div class="col-sm-12">
+                <h4>
+                    {{__('general.Category')}} tree JSON. Items are sorted by {{ $locale_name }} translations; (trans) parameter. 
+                </h4>
+                <textarea rows="20" style="width: 100%">{!! $filtered_json !!}</textarea>
+            </div>
+
             <div class="col-sm-12">
                 <h4>
                     {{__('general.Categories')}} ({{ $count }})
@@ -30,7 +46,7 @@
                   fill: #999;
                 }
                 .node text {
-                  font-size: 11px;
+                  font-size: 9px;
                 }
                 .node--internal circle {
                   fill: #555;
@@ -53,10 +69,10 @@
                 }
 
                 .disorder text, .disorder circle{
-                    fill: #296387;
+                    fill: #7D1E0C;
                 }
                 .link.disorder{
-                    stroke: #296387;
+                    stroke: #7D1E0C;
                 }
 
                 .hive text, .hive circle{
@@ -67,10 +83,10 @@
                 }
 
                 .food text, .food circle{
-                    fill: #7D1E0C;
+                    fill: #0D5308;
                 }
                 .link.food{
-                    stroke: #7D1E0C;
+                    stroke: #0D5308;
                 }
 
                 .production text, .production circle{
@@ -94,12 +110,24 @@
                     stroke: #40114A;
                 }
 
+                .space text, .space circle{
+                    fill: #40114A;
+                }
+                .link.space{
+                    stroke: #40114A;
+                }
 
+                .weather text, .weather circle{
+                    fill: #296387;
+                }
+                .link.weather{
+                    stroke: #296387;
+                }
 
                 
                 </style>
 
-                <svg width="600" height="600"></svg>
+                <svg width="1600" height="1600"></svg>
                 <script src="https://d3js.org/d3.v4.min.js"></script>
                 <script>
                 function project(x, y) {
@@ -155,21 +183,6 @@
                 }
                 
                 </script>
-            </div>
-
-            <div class="col-sm-12">
-                <h4>
-                    {{__('general.Categories')}} ({{ $count }}) visual flat JSON basis. Items are sorted by {{ $locale_name }} translations. Categories fixed: {{ $fixed }}. 
-                    <button onclick="createVisual()">Create visual</button>
-                </h4>
-                <textarea id="visual_data_source" onload="createVisual()" rows="20" style="width: 100%">{!! $catsJson !!}</textarea>
-            </div>
-
-            <div class="col-sm-12">
-                <h4>
-                    {{__('general.Category')}} tree JSON. Items are sorted by {{ $locale_name }} translations; (trans) parameter. 
-                </h4>
-                <textarea rows="20" style="width: 100%">{!! $filtered_json !!}</textarea>
             </div>
 
         </div>

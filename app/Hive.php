@@ -5,6 +5,7 @@ namespace App;
 use Iatstuti\Database\Support\CascadeSoftDeletes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Log;
 
 use Auth;
 
@@ -19,6 +20,30 @@ class Hive extends Model
     protected $appends  = ['type','location','attention','impression','notes','reminder','reminder_date','inspection_count','sensors','owner','editable','group_ids','last_inspection_date'];
 
     public $timestamps = false;
+
+    public static function boot()
+    {
+        parent::boot();
+
+        static::deleting(function($h)
+        {
+            // remove device-hive link
+            foreach ($h->devices as $d)
+            {
+                $d->hive_id = null;
+                $d->save();
+            };
+            // remove hive id from AlertRules exclude_hive_ids
+            $ars = $h->user->alert_rules;
+            if (isset($ars) && count($ars) > 0)
+            {
+                foreach ($ars as $a)
+                    $a->remove_hive_id_from_exclude_hive_ids($h->id);
+            }
+            
+        });
+    }
+
 
 	// Relations
 	public function getTypeAttribute()

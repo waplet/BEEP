@@ -58,14 +58,22 @@ class Category extends Model
         return $this->trans();
     }
 
-    public function getUnitAttribute()
+    public function getUnitAttribute($value=null) // PGe 2022-05-23: apparently the $value is filled with '' in case of an append
     {
-        if ($this->physical_quantity_id != null)
-        {
-            $unit = $this->physicalQuantity()->value('abbreviation');
-            if ($unit)
-                return $unit;
-        }
+        if (empty($value))
+            $value = 'abbreviation';
+
+        if ($this->physical_quantity_id != null && $this->physicalQuantity)
+            return $this->physicalQuantity()->value($value);
+
+        return null;
+    }
+
+    public function getPhysicalQuantityNameAttribute()
+    {
+        if ($this->physical_quantity_id != null && $this->physicalQuantity)
+            return $this->physicalQuantity()->value('name');
+
         return null;
     }
    
@@ -148,12 +156,25 @@ class Category extends Model
     {
         $type = $this->inputType;
         $range= [];
+        $types= ['boolean','boolean_yes_red','score_quality','score_amount','smileys_3'];
+
         if (isset($type))
         {
-            if (isset($type->min)) array_push($range,  __('crud.min').': '.$type->min);
-            if (isset($type->max)) array_push($range,  __('crud.max').': '.$type->max);
+            $inputType = $type->type;
+            if (in_array($inputType, $types))
+            {
+                $type_trans_array = __("taxonomy.$inputType");
+                //dd($type_trans_array);
+                for ($i=0; $i < count($type_trans_array); $i++)
+                    $range[] = "$i=".$type->render($i);
+            }
+            else
+            {
+                if (isset($type->min)) array_push($range,  __('crud.min').': '.$type->min);
+                if (isset($type->max)) array_push($range,  __('crud.max').': '.$type->max);
+            }
         }
-        return count($range) == 0 ? null : implode(' - ', $range);
+        return count($range) == 0 ? null : implode("\n", $range);
     }
 
     public function translation($language_abbr)
@@ -283,8 +304,14 @@ class Category extends Model
 
     public static function findCategoryByRootParentAndName($root_name, $parent_name, $name, $whereTypeIn=['system']) 
     {
-        $root   = Category::whereIsRoot()->where('name', $root_name)->first();
-        $parent = Category::descendantsAndSelf($root)->whereIn('type', $whereTypeIn)->where('name', $parent_name)->first();
+        $root = Category::whereIsRoot()->where('name', $root_name)->first();
+
+        if ($root_name === $parent_name && isset($root))
+            $parent = $root;
+        else
+            $parent = Category::descendantsAndSelf($root)->whereIn('type', $whereTypeIn)->where('name', $parent_name)->first();
+
+        //dd($parent);
         if (isset($parent))
             return $parent->children()->where('name', $name)->first();
 
