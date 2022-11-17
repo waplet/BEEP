@@ -7,15 +7,18 @@ use App\Http\Controllers\Controller;
 
 use Auth;
 use Storage;
+use Session;
 use App\SampleCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 use LaravelLocalization;
 use Moment\Moment;
 use App\Category;
 use App\Inspection;
 use App\InspectionItem;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -27,20 +30,259 @@ class SampleCodeController extends Controller
         return view('sample-code.code');
     }
 
+    // Get excel template to fill out
     public function upload()
     {
         $template_url = $this->createExcelTemplate();
-        return view('sample-code.upload', compact('template_url'));
+        $data         = Session::get('data');
+        $col_names    = Session::get('col_names');
+
+        return view('sample-code.upload', compact('template_url', 'data', 'col_names'));
     }
 
+    // Upload filled excel template to input
     public function upload_store(Request $request)
     {
-        
-        return view('sample-code.upload');
+        $msg            = 'No file found';
+        $res            = 'error';
+        $items_replaced = 0; 
+        $items_added    = 0; 
+        $inspection_cnt = 0; 
+        $data           = [];
+        $col_names      = [];
+        $col_input_types= [];
+        $sample_code_id = Category::findCategoryIdByParentAndName('laboratory_test', 'sample_code');
+
+        if ($request->has('checked') && $request->has('data'))
+        {
+            $data = json_decode($request->input('data'), true);
+            $checked_ids = $request->input('checked');
+
+            // Add this data as inspection items to the inspection where the corresponding sample code has been generated
+            foreach ($data as $checked_id => $inspection_items) // $inspection_items is array of ['cat_id'=>value]
+            {
+
+                if (in_array($checked_id, $checked_ids) && isset($inspection_items[$sample_code_id])) // only store inspections of checked entries
+                {
+                    $sample_code = $inspection_items[$sample_code_id];
+                    unset($inspection_items[0]); // remove initial checked item
+                    
+                    // look up inspection
+                    $inspection_id = InspectionItem::where('category_id', $sample_code_id)->where('value', $sample_code)->value('inspection_id');
+                    $inspection    = Inspection::find($inspection_id);
+
+                    if ($inspection)
+                    {
+                        $inspection_cnt++;
+                        
+                        foreach ($inspection_items as $category_id => $value)
+                        {
+                            $inspection_item_exists = $inspection->items()->where('category_id', $category_id);
+                                
+                            if ($inspection_item_exists->count() > 0)
+                            {
+                                $inspection_item_exists->delete();
+                                $items_replaced++;
+                            }
+                            else
+                            {
+                                $items_added++;
+                            }
+
+                            $itemData = 
+                            [
+                                'category_id'   => $category_id,
+                                'inspection_id' => $inspection_id,
+                                'value'         => $value,
+                            ];
+                            InspectionItem::create($itemData);
+                        }
+                    }
+                }
+            }
+            // show result
+            $msg = "Added data for $inspection_cnt inspections. Added $items_added, replaced $items_replaced inspection items in total.";
+            if ($inspection_cnt > 0 && $items_added + $items_replaced > 0)
+            {
+                $res  = 'success';
+                $data = [];
+            }
+
+        }
+        else if ($request->has('sample-code-excel') && $request->hasFile('sample-code-excel'))
+        {
+            $file = $request->file('sample-code-excel');
+            if ($file->isValid())
+            {
+                $msg  = 'File uploaded';
+                $res  = 'success';
+                $path = $request->file('sample-code-excel')->getRealPath();
+                
+                $reader = IOFactory::createReader('Xlsx');
+                $reader->setReadDataOnly(true);
+                $reader->setReadEmptyCells(false);
+                $sheet  = $reader->load($path);
+                //dd($sheet);
+
+                $sheets = $sheet->getSheetCount();
+                $wsheet = $sheet->getSheet(0); // get first sheet
+
+                $template = $this->createExcelTemplate(true); // array[row[0 -> 6]=>[col_0, ..., col_n]] (col0 being the explanation column)
+                $t_sheet  = reset($template); // [0=>CATEGORY ID, 1=>HIERACHY, 2=>NAME, 3=>PHYSICAL QUANTITY, 4=>UNIT, 5=>INPUT TYPE, 6=>INPUT RANGE, 7=>First empty row for entry]
+                //dd($t_sheet);
+                $t_headers= count($t_sheet)-1; // one blank row is the first entry row
+                $t_types  = $t_sheet[5]; 
+                $cat_ids  = $t_sheet[0];
+
+                if ($cat_ids[0] == 'CATEGORY ID')
+                    unset($cat_ids[0]);
+
+                // Create data array to show and persist
+                $cat_ids_valid     = [];
+                $col_names_valid   = [];
+                $input_types_valid = [];
+                $col_names[0]      = 'Ok?';
+
+                foreach ($wsheet->getRowIterator() as $row_num => $row) 
+                {
+                    $cellIterator = $row->getCellIterator();
+                    $cellIterator->setIterateOnlyExistingCells(true);
+
+                    // map header rows to (possibly different) template category_id column order in Excel
+                    if ($row_num == 1) // map category_id header row in Excel
+                    {
+                        $col_index = 0;
+                        foreach ($cellIterator as $col_name => $cell)
+                        {
+                            $cat_id = $cell->getValue();
+                            if (isset($cat_id) && in_array($cat_id, $cat_ids))
+                            {
+                                $cat_ids_valid[$col_name] = $cat_id; // Cat id per col name: ["B"=>1371, "C"=>1425, "Col_name"=>cat_id, etc]
+                                $col_names[$cat_id]       = $t_sheet[1][$col_index].$t_sheet[2][$col_index]; // [cat_id => "Hierachy + Name"]
+                                $col_input_types[$cat_id] = $t_sheet[5][$col_index]; // [cat_id => "Input type"]
+                            }
+                            $col_index++;
+                        }
+                        $col_names_valid = array_keys($cat_ids_valid);  // [0=>"B", 1=>"C", etc]
+                        //dd($col_names_valid, $cat_ids_valid, $col_names, $col_input_types);
+                    }
+                    else if ($row_num > $t_headers) // entered values
+                    {
+                        foreach ($cellIterator as $col_name => $cell)
+                        {
+                            if (in_array($col_name, $col_names_valid)) // valid cat_id col:  $col_names_valid = [0=>"B", 1=>"C", etc]
+                            {
+                                $value = $cell->getValue(); 
+                                $cat_id= $cat_ids_valid[$col_name];
+
+                                if (isset($value))
+                                {
+                                    // Convert known fields to the type of data
+                                    $corrected_value = $value;
+
+                                    // Check if there is a formula, if so, try to parse it
+                                    if (substr($value,0,1) == '=') 
+                                    {
+                                        try {
+                                            $corrected_value = $cell->getCalculatedValue();
+                                        } catch (Exception $e) {
+                                            Log::error("SampleCodeController.upload_store formula ($value) parse error: ".$e->getMessage());
+                                            $corrected_value = $value;
+                                        }
+                                    }
+
+                                    // Try to force values in the requested format
+                                    $input_type = $col_input_types[$cat_id];
+                                    switch($input_type)
+                                    {
+                                        case 'sample_code':
+                                            $corrected_value = strtoupper(substr($value, 0, 8));
+                                            break;
+                                        case 'date':
+                                            if (is_numeric($value))
+                                            {
+                                                $unix_timestamp = ($value - 25569) * 86400;
+                                                $corrected_value= date("Y-m-d H:i:s", $unix_timestamp);
+                                            }
+                                            else
+                                            {
+                                                $corrected_value= date("Y-m-d H:i:s", strtotime($value));
+                                            }
+                                            break;
+                                        case 'text':
+                                            $corrected_value = (string)$value;
+                                            break;
+                                        case 'boolean':
+                                        case 'boolean_yes_red':
+                                            $corrected_value = intval(boolval($value));
+                                            break;
+                                        case 'score_amount':
+                                            $intval = intval($value);
+                                            $corrected_value = $intval > 4 || $intval < 0 ? 0 : $intval;
+                                            break;
+                                        case 'number':
+                                        case 'number_0_decimals':
+                                        case 'number_1_decimals':
+                                        case 'number_2_decimals':
+                                        case 'number_3_decimals':
+                                        case 'number_positive':
+                                        case 'number_negative':
+                                        case 'number_percentage':
+                                            if (strpos($value, ',') !== false) // replace , with .
+                                                $value = str_replace(',', '.', $value);
+
+                                            $corrected_value = (float)$value;
+
+                                            if ($input_type == 'number_0_decimals')
+                                                $corrected_value = round($corrected_value, 0);
+                                            else if ($input_type == 'number_1_decimals')
+                                                $corrected_value = round($corrected_value, 1);
+                                            else if ($input_type == 'number_2_decimals')
+                                                $corrected_value = round($corrected_value, 2);
+                                            else if ($input_type == 'number_3_decimals')
+                                                $corrected_value = round($corrected_value, 3);
+                                            else if ($input_type == 'number_positive')
+                                                $corrected_value = abs($corrected_value);
+                                            else if ($input_type == 'number_negative')
+                                                $corrected_value = -1 * abs($corrected_value);
+                                            else if ($input_type == 'number_percentage')
+                                                $corrected_value = min(100, max(0, $corrected_value));
+                                            
+                                            break;
+                                    }
+
+                                    if (!isset($data[$row_num]))
+                                        $data[$row_num] = [];
+
+                                    if ($cat_id == $sample_code_id) // check if sample code exists in DB
+                                        $data[$row_num][0] = SampleCode::where('sample_code',$corrected_value)->count();
+
+                                    $data[$row_num][$cat_id] = $corrected_value;
+                                }
+                            }
+                        }
+                    }
+                }
+                $cols   = $wsheet->getHighestColumn();
+                $rows   = $wsheet->getHighestRow();
+                $entries= count($data);
+                $editor = $sheet->getProperties()->getLastModifiedBy();
+                $lastmo = date('Y-m-d H:i:s', $sheet->getProperties()->getModified());
+                $msg   .= ". $sheets Tabs, First tab: $entries entries ($rows rows up to col $cols), Last modified by: $editor @ $lastmo";
+            }
+            else
+            {
+                $msg  = 'File uploaded, but invalid';
+            }
+        }
+
+        //dd($col_names, $data);
+
+        return redirect('code-upload')->with(["$res"=>$msg, 'data'=>$data, 'col_names'=>$col_names, 'col_input_types'=>$col_input_types]);
     }
 
     
-    private function createExcelTemplate()
+    private function createExcelTemplate($array_only = false)
     {
         $locale            = LaravelLocalization::getCurrentLocale();
         $spreadsheet_array = [];
@@ -90,6 +332,9 @@ class SampleCodeController extends Controller
         }
 
         $spreadsheet_array[$sheet_title] = $rows;
+
+        if ($array_only)
+            return $spreadsheet_array;
 
         // $spreadsheet_array[$sheet_title][0][] = __('export.deleted_at');
 

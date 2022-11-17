@@ -21,6 +21,7 @@ use Validator;
 /**
  * @group Api\LocationController
  * Manage Apiaries
+ * @authenticated
  */
 class LocationController extends Controller
 {

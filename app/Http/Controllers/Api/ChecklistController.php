@@ -9,6 +9,8 @@ use Moment\Moment;
 
 /**
  * @group Api\ChecklistController
+ * Manage your personal inspection checklists
+ * @authenticated
  */
 class ChecklistController extends Controller
 {
@@ -35,7 +37,7 @@ class ChecklistController extends Controller
             $categories = explode(',', $request->input('categories'));
             $checklist->syncCategories($categories);
         }
-        return response()->json($checklist, 201);
+        return response()->json(['checklist_id'=>$checklist->id], 201);
     }
 
 
@@ -65,7 +67,8 @@ class ChecklistController extends Controller
             if ($request->filled('categories'))
             {
                 $categories = explode(',', $request->input('categories'));
-                return response()->json($checklist->syncCategories($categories));
+                $checklist->syncCategories($categories);
+                return response()->json(['checklist_id'=>$checklist->id]);
             }
         }
         return Response::json('Nothing updated', 500);

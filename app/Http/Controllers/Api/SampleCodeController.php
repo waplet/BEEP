@@ -8,8 +8,8 @@ use Illuminate\Http\Request;
 
 /**
  * @group Api\SampleCodeController
- *
  * Research lab result sample code controller
+ * @authenticated
  */
 class SampleCodeController extends Controller
 {
@@ -29,31 +29,31 @@ class SampleCodeController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
-     */
+    api/samplecode POST
+    Create a sample code for lab results
+    @authenticated
+    **/
     public function store(Request $request)
     {
-        if($request->filled('hive_id') && $request->user()->hives()->find($request->input('hive_id')))
+        if($request->filled('hive_id') && $request->user()->allHives()->find($request->input('hive_id')))
         {
-            $code = $request->only('hive_id', 'queen_id');
-            $sample_time = $request->filled('sample_date') ? strtotime($request->input('sample_date')) : time();
-            $code['sample_date'] = date('Y-m-d H:i:s', $sample_time);
-            $code['sample_code'] = SampleCode::generate_code();
-            $code['user_id']     = $request->user()->id;
-            $samplecode          = SampleCode::create($code);
+            try{
+                $code                = $request->only('hive_id', 'queen_id');
+                $sample_time         = $request->filled('sample_date') ? strtotime($request->input('sample_date')) : time();
+                $code['sample_date'] = date('Y-m-d H:i:s', $sample_time);
+                $code['sample_code'] = SampleCode::generate_code();
+                $code['user_id']     = $request->user()->id;
+                $samplecode          = SampleCode::create($code);
+            } catch (Exception $e) {
+                Log::error("Api/SampleCodeController.store error: ".$e->getMessage());
+            }
             return response()->json($samplecode, 201);
         }
         return response()->json(null, 400);
     }
 
     /**
-     * Display the specified resource.
-     *
-     * @param  \App\SampleCode  $sampleCode
-     * @return \Illuminate\Http\Response
+     * Show not used
      */
     public function show(SampleCode $sampleCode)
     {
@@ -61,11 +61,7 @@ class SampleCodeController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \App\SampleCode  $sampleCode
-     * @return \Illuminate\Http\Response
+     * Update not used
      */
     public function update(Request $request, SampleCode $sampleCode)
     {

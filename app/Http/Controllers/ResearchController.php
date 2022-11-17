@@ -152,6 +152,7 @@ class ResearchController extends Controller
             'date_start'    => 'nullable|date',
             'date_until'    => 'nullable|date|after:date_start',
             'user_ids.*'    => 'nullable|exists:users,id',
+            'device_ids.*'  => 'nullable|exists:sensors,id',
         ]);
 
         //die(print_r($request->all()));
@@ -164,7 +165,9 @@ class ResearchController extends Controller
         $download_url = null;
         $sensor_urls  = [];
         $download     = $request->has('download-meta') || $request->has('download-all') ? true : false;
-        $sensordata   = $request->has('download-all');
+        $dl_sensordata= $request->has('download-all');
+        $device_ids   = $request->input('device_ids');
+        $devices_all  = collect();
 
         // Make dates table
         $dates  = [];
@@ -221,7 +224,7 @@ class ResearchController extends Controller
 
         //die(print_r([$request->input('user_ids'), $consent_users_selected, $users]));
         // Fill dates array
-        $assets = ["users"=>0, "apiaries"=>0, "hives"=>0, "inspections"=>0, "devices"=>0, "measurements"=>0, "weather"=>0, "flashlogs"=>0, "samplecodes"=>0];
+        $assets = ["users"=>0, "apiaries"=>0, "hives"=>0, "inspections"=>0, "devices"=>0, "measurements"=>0, "measurements_imported"=>0, "measurements_total"=>0, "data_completeness"=>0, "weather"=>0, "flashlogs"=>0, "samplecodes"=>0, "sensor_definitions"=>0];
 
         $moment = $moment_start;
         while($moment < $moment_end)
@@ -365,7 +368,19 @@ class ResearchController extends Controller
                             __('export.deleted_at')]
                         ];
 
-            if ($sensordata)
+            $spreadsheet_array[__('export.sensordefs')] = [
+                           ['Name',
+                            'Device_id',
+                            'inside_hive',
+                            'offset',
+                            'multiplier',
+                            'input_measurement',
+                            'output_measurement',
+                            __('export.created_at'),
+                            __('export.deleted_at')]
+                        ];
+
+            if ($dl_sensordata)
                 $spreadsheet_array['Sensor data'] = [
                             ['User_id',
                             'Device_id',
@@ -374,7 +389,7 @@ class ResearchController extends Controller
                             'Data file']
                         ];
 
-            if ($sensordata)
+            if ($dl_sensordata)
                 $spreadsheet_array['Sensor Flashlogs'] = [
                             ['User_id',
                             'Device_id',
@@ -454,13 +469,17 @@ class ResearchController extends Controller
             // add user data
             $user_apiaries     = $user->locations()->withTrashed()->where('created_at', '<', $date_until)->orderBy('created_at')->get();
             $user_hives        = $user->hives()->withTrashed()->where('created_at', '<', $date_until)->orderBy('created_at')->get();
-            $user_devices      = $user->devices()->withTrashed()->where('created_at', '<', $date_until)->orderBy('created_at')->get();
+            $user_devices_all  = $user->devices()->withTrashed()->where('created_at', '<', $date_until)->orderBy('created_at')->get();
+            $devices_all       = $devices_all->merge($user_devices_all);
+            $user_devices      = isset($device_ids) ? $user_devices_all->whereIn('id', $device_ids) : $user_devices_all;
             $user_flashlogs    = FlashLog::where('user_id', $user_id)->where('created_at', '>=', $date_start)->where('created_at', '<', $date_until)->orderBy('created_at')->get();
             $user_samplecodes  = $user->samplecodes()->where('sample_date', '>=', $date_start)->where('sample_date', '<', $date_until)->orderBy('sample_date')->get();
             $user_measurements = [];
+            $user_meas_import  = [];
             $user_weather_data = [];
+            $user_sensor_defs  = [];
             
-            //die(print_r($user_samplecodes->toArray()));
+            //die(print_r($user_devices->toArray()));
 
             // add hive inspections (also from collaborators)
             $hive_inspection_ids = [];
@@ -490,23 +509,37 @@ class ResearchController extends Controller
                     $loc = $device->location();
                     if ($loc && isset($loc->coordinate_lat) && isset($loc->coordinate_lon)) 
                         $user_dloc_coords[] = '("lat" = \''.$loc->coordinate_lat.'\' AND "lon" = \''.$loc->coordinate_lon.'\')';
-                }
-                
-                $user_device_keys = '('.implode(' OR ', $user_device_keys).')';
 
-                try{
-                    $this->cacheRequestRate('influx-get');
-                    $this->cacheRequestRate('influx-research');
-                    $query  = 'SELECT COUNT("bv") as "count" FROM "sensors" WHERE '.$user_device_keys.' AND time >= \''.$date_curr_consent.'\' AND time <= \''.$moment_end->format('Y-m-d H:i:s').'\' GROUP BY time(1d)';
-                    //die($query); 
-                    $points = $this->client::query($query)->getPoints();
-                } catch (InfluxDB\Exception $e) {
-                    // return Response::json('influx-group-by-query-error', 500);
+                    // Add sensor definitions
+                    $sensor_defs = $this->getSensorDefinitions($device, $date_next_consent);
+                    foreach ($sensor_defs as $sdef)
+                        $user_sensor_defs[] = $sdef;
+
                 }
-                if (count($points) > 0)
+
+                if (count($user_device_keys) > 0)
                 {
-                    foreach ($points as $point) 
-                        $user_measurements[substr($point['time'],0,10)] = $point['count'];
+                    $user_device_keys = '('.implode(' OR ', $user_device_keys).')';
+
+                    try{
+                        $this->cacheRequestRate('influx-get');
+                        $this->cacheRequestRate('influx-research');
+                        $query  = 'SELECT COUNT("bv") as "count" FROM "sensors" WHERE '.$user_device_keys.' AND time >= \''.$date_curr_consent.'\' AND time <= \''.$moment_end->format('Y-m-d H:i:s').'\' GROUP BY time(1d),from_flashlog';
+                        //die($query); 
+                        $points = $this->client::query($query)->getPoints();
+                    } catch (InfluxDB\Exception $e) {
+                        // return Response::json('influx-group-by-query-error', 500);
+                    }
+                    if (count($points) > 0)
+                    {
+                        foreach ($points as $point)
+                        {
+                            if ($point['from_flashlog'] === '1')
+                                $user_meas_import[substr($point['time'],0,10)] = $point['count'];
+                            else
+                                $user_measurements[substr($point['time'],0,10)] = $point['count'];
+                        }
+                    }
                 }
 
                 // Add weather data
@@ -528,7 +561,6 @@ class ResearchController extends Controller
 
             // go over dates, compare consent dates
             $i = 0;
-            //print_r([$index, $user_consent, $date_curr_consent, $date_next_consent]);
             $user_data_counts = $assets;
 
             foreach ($dates as $d => $v) 
@@ -569,15 +601,20 @@ class ResearchController extends Controller
                     $index++;
                 }
                 
+            
+
                 // Fill objects for consent period
                 if ($user_consent && ($next_consent || $i == 0))
                 {    
                     // add 
-                    $user_data_counts['users']    = $user_consent;
-                    $user_data_counts['apiaries'] = $user_apiaries->where('created_at', '<=', $date_next_consent)->count();
-                    $user_data_counts['hives']    = $user_hives->where('created_at', '<=', $date_next_consent)->count();
-                    $user_data_counts['devices']  = $user_devices->where('created_at', '<=', $date_next_consent)->count();
-                    $user_data_counts['flashlogs']= $user_flashlogs->where('created_at', '<=', $date_next_consent)->count();
+                    $user_data_counts['users']              = $user_consent;
+                    $user_data_counts['apiaries']           = $user_apiaries->where('created_at', '<=', $date_next_consent)->count();
+                    $user_data_counts['hives']              = $user_hives->where('created_at', '<=', $date_next_consent)->count();
+                    $user_data_counts['devices']            = $user_devices->where('created_at', '<=', $date_next_consent)->count();
+                    $user_data_counts['flashlogs']          = $user_flashlogs->where('created_at', '<=', $date_next_consent)->count();
+                    $user_data_counts['sensor_definitions'] = count($user_sensor_defs);
+
+                    //print_r([$i, $index, $user_consent, $date_curr_consent, $date_next_consent, $user_data_counts, $user_devices->toArray()]);
 
                     if ($download)
                     {
@@ -602,7 +639,11 @@ class ResearchController extends Controller
                         foreach ($sampe as $sam)
                             $spreadsheet_array['Sample codes'][] = $sam;
 
-                        if ($sensordata && $user_devices->count() > 0)
+                        if (count($user_sensor_defs) > 0)
+                            foreach ($user_sensor_defs as $sdef) 
+                                $spreadsheet_array[__('export.sensordefs')][] = $sdef;
+
+                        if ($user_devices->count() > 0)
                         {
                             foreach ($user_devices as $device)
                             {
@@ -610,28 +651,31 @@ class ResearchController extends Controller
                                 if ($device->created_at < $date_next_consent)
                                 {
                                     $spreadsheet_array[__('export.devices')][] = $this->getDevice($user_id, $device);
-                                
-                                    // Export data to file per device / period
-                                    $where    = $device->influxWhereKeys().' AND time >= \''.$date_curr_consent.'\' AND time <= \''.$date_next_consent.'\'';
-                                    $fileName = strtolower(env('APP_NAME')).'-export-'.$research->name.'-device-id-'.$device->id.'-name-'.urlencode($device->name).'-sensor-data-'.substr($date_curr_consent,0,10).'-'.substr($date_next_consent,0,10).'-'.Str::random(10).'.csv';
-                                    $filePath = $this->exportCsvFromInflux($where, $fileName, '*', 'sensors');
-                                    if ($filePath)
+                                    
+                                    if ($dl_sensordata)
                                     {
-                                        $spreadsheet_array['Sensor data'][] = [$user_id, $device->id, $date_curr_consent, $date_next_consent, $filePath];
-                                        $sensor_urls[$fileName] = $filePath;
-                                    }
-
-                                    // Export data to file per device location / period
-                                    $loc = $device->location();
-                                    if ($loc && isset($loc->coordinate_lat) && isset($loc->coordinate_lon)) 
-                                    {
-                                        $where    = '"lat" = \''.$loc->coordinate_lat.'\' AND "lon" = \''.$loc->coordinate_lon.'\' AND time >= \''.$date_curr_consent.'\' AND time <= \''.$date_next_consent.'\'';
-                                        $fileName = strtolower(env('APP_NAME')).'-export-'.$research->name.'-device-id-'.$device->id.'-name-'.urlencode($device->name).'-weather-data-'.substr($date_curr_consent,0,10).'-'.substr($date_next_consent,0,10).'-'.Str::random(10).'.csv';
-                                        $filePath = $this->exportCsvFromInflux($where, $fileName, '*', 'weather');
+                                        // Export data to file per device / period
+                                        $where    = $device->influxWhereKeys().' AND time >= \''.$date_curr_consent.'\' AND time <= \''.$date_next_consent.'\'';
+                                        $fileName = strtolower(env('APP_NAME')).'-export-research-'.$research->id.'-device-id-'.$device->id.'-sensor-data-'.substr($date_curr_consent,0,10).'-'.substr($date_next_consent,0,10).'-'.Str::random(10).'.csv';
+                                        $filePath = $this->exportCsvFromInflux($where, $fileName, '*', 'sensors');
                                         if ($filePath)
                                         {
-                                            $spreadsheet_array['Weather data'][] = [$user_id, $device->id, $date_curr_consent, $date_next_consent, $filePath];
+                                            $spreadsheet_array['Sensor data'][] = [$user_id, $device->id, $date_curr_consent, $date_next_consent, $filePath];
                                             $sensor_urls[$fileName] = $filePath;
+                                        }
+
+                                        // Export data to file per device location / period
+                                        $loc = $device->location();
+                                        if ($loc && isset($loc->coordinate_lat) && isset($loc->coordinate_lon)) 
+                                        {
+                                            $where    = '"lat" = \''.$loc->coordinate_lat.'\' AND "lon" = \''.$loc->coordinate_lon.'\' AND time >= \''.$date_curr_consent.'\' AND time <= \''.$date_next_consent.'\'';
+                                            $fileName = strtolower(env('APP_NAME')).'-export-research-'.$research->id.'-device-id-'.$device->id.'-weather-data-'.substr($date_curr_consent,0,10).'-'.substr($date_next_consent,0,10).'-'.Str::random(10).'.csv';
+                                            $filePath = $this->exportCsvFromInflux($where, $fileName, '*', 'weather');
+                                            if ($filePath)
+                                            {
+                                                $spreadsheet_array['Weather data'][] = [$user_id, $device->id, $date_curr_consent, $date_next_consent, $filePath];
+                                                $sensor_urls[$fileName] = $filePath;
+                                            }
                                         }
                                     }
                                 }
@@ -649,6 +693,7 @@ class ResearchController extends Controller
                     $dates[$d]['apiaries']   += $user_data_counts['apiaries'];
                     $dates[$d]['hives']      += $user_data_counts['hives'];
                     $dates[$d]['devices']    += $user_data_counts['devices'];
+                    $dates[$d]['sensor_definitions'] += $user_data_counts['sensor_definitions'];
 
                     $inspections_today        = $hive_inspections->where('created_at', '>=', $d_start)->where('created_at', '<=', $d_end)->count();
                     $dates[$d]['inspections'] = $v['inspections'] + $inspections_today;
@@ -660,7 +705,13 @@ class ResearchController extends Controller
                     $dates[$d]['samplecodes'] = $v['samplecodes'] + $samplecodes_today;
                     
                     if (in_array($d, array_keys($user_measurements)))
-                        $dates[$d]['measurements']= $v['measurements'] + $user_measurements[$d];
+                        $dates[$d]['measurements'] = $v['measurements'] + $user_measurements[$d];
+
+                    if (in_array($d, array_keys($user_meas_import)))
+                        $dates[$d]['measurements_imported'] = $v['measurements_imported'] + $user_meas_import[$d];
+
+                    $dates[$d]['measurements_total']    = $dates[$d]['measurements'] + $dates[$d]['measurements_imported'];
+                    $dates[$d]['data_completeness']     = $dates[$d]['devices'] > 0 ? round(100 * $dates[$d]['measurements_total'] / ($dates[$d]['devices'] * (60*24/15))) : 0;
 
                     if (in_array($d, array_keys($user_weather_data)))
                         $dates[$d]['weather']= $v['weather'] + $user_weather_data[$d];
@@ -669,7 +720,7 @@ class ResearchController extends Controller
 
                 $i++;
             }
-            //die();
+            // die();
         }
 
         // reverse array for display
@@ -681,22 +732,32 @@ class ResearchController extends Controller
         {
             foreach ($day_arr as $asset => $count) 
             {
-                if ($asset == 'inspections' || $asset == 'measurements' || $asset == 'weather' || $asset == 'samplecodes')
+                if ($asset == 'inspections' || $asset == 'measurements' || $asset == 'measurements_imported' || $asset == 'measurements_total' || $asset == 'data_completeness' || $asset == 'weather' || $asset == 'samplecodes' || $asset == 'flashlogs')
                     $totals[$asset] += $count;
                 else
                     $totals[$asset] = max($totals[$asset], $count);
             }
         }
 
+        // Average data completenes
+        if (count($dates) > 0)
+            $totals['data_completeness'] = round($totals['data_completeness'] / count($dates));
+
         // Export data, show download link
         if ($download)
         {
-            //die(print_r([$consents, $spreadsheet_array[__('export.devices')], $spreadsheet_array['Sensor data']]));
-            $fileName     = strtolower(env('APP_NAME')).'-export-'.$research->name;
+            //die(print_r([$consents, $totals, $spreadsheet_array[__('export.devices')], $spreadsheet_array[__('export.sensordefs')]]));
+            $fileName     = strtolower(env('APP_NAME')).'-export-research-'.$research->id;
             $download_url = $this->export($spreadsheet_array, $fileName, $date_start, $date_until);
         }
 
-        return view('research.show', compact('research', 'dates', 'consent_users_select', 'consent_users_selected', 'download_url', 'sensor_urls', 'totals', 'date_start', 'date_until'));
+        // Make readable devices select list 
+        $devices_select = [];
+        $devices_sorted = $devices_all->sortBy('user_id')->sortBy('name');
+        foreach ($devices_sorted as $d)
+            $devices_select[$d->id] = $d->name.' - ('.$d->user->name.')'; 
+
+        return view('research.show', compact('research', 'dates', 'consent_users_select', 'consent_users_selected', 'download_url', 'sensor_urls', 'totals', 'date_start', 'date_until', 'devices_select', 'device_ids'));
     }
 
     /**
@@ -973,6 +1034,24 @@ class ResearchController extends Controller
         ];
     }
 
+    private function getSensorDefinitions($device, $date_until=null)
+    {
+        return $device->sensorDefinitions()->where('created_at', '<=', $date_until)->orderBy('created_at')->get()->map(function($item)
+        {
+            return [
+                $item->name,
+                $item->device_id, 
+                $item->inside,
+                $item->offset,
+                $item->multiplier,
+                $item->input_abbr,
+                $item->output_abbr,
+                $item->created_at,
+                $item->deleted_at
+            ];
+        });
+    }
+
     private function getFlashlogs($user_id, $flashlogs, $date_start=null, $date_until=null)
     {
         return $flashlogs->where('created_at', '<=', $date_until)->sortByDesc('created_at')->sortBy('device_id')->map(function($item) use ($user_id)
@@ -1057,7 +1136,7 @@ class ResearchController extends Controller
                 $names = $measurements;
             else
                 $names = $this->output_sensors;
-            
+
             $queryList = Device::getAvailableSensorNamesNoCache($names, $where, $database);
             
             if (isset($queryList) && gettype($queryList) == 'array' && count($queryList) > 0)
@@ -1065,7 +1144,7 @@ class ResearchController extends Controller
             else 
                 $groupBySelect = '"'.implode('","',$names).'"';
 
-            $query = 'SELECT '.$groupBySelect.' FROM "'.$database.'" WHERE '.$where;
+            $query = 'SELECT '.$groupBySelect.',"from_flashlog" FROM "'.$database.'" WHERE '.$where;
         }
         else // i.e. weather data
         {
@@ -1095,8 +1174,15 @@ class ResearchController extends Controller
         $csv_head = [];
         foreach ($csv_sens as $sensor_name) 
         {
-            $meas       = Measurement::where('abbreviation', $sensor_name)->first();
-            $csv_head[] = $meas ? $meas->pq_name_unit().' ('.$sensor_name.')' : $sensor_name;
+            if ($sensor_name == 'from_flashlog')
+            {
+                $csv_head[] = 'Imported from device flash log';
+            }
+            else
+            {
+                $meas       = Measurement::where('abbreviation', $sensor_name)->first();
+                $csv_head[] = $meas ? $meas->pq_name_unit().' ('.$sensor_name.')' : $sensor_name;
+            }
         }
         $csv_head = '"'.implode('"'.$separator.'"', $csv_head).'"'."\r\n";
 

@@ -23,10 +23,12 @@ storage/logs/*
 Homestead.json
 Homestead.yaml
 .env
+.env.docs
 .phpunit.result.cache
 .DS_Store
 .phpintel
 .log
+.scribe
 
 npm-debug.log
 yarn-error.log
