@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\ChecklistFactory;
 use App\Services\PollihubTTNDownlinkService;
 use GuzzleHttp\Client;
 use Illuminate\Support\ServiceProvider;
