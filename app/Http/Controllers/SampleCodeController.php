@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Http\Requests;
 use App\Http\Controllers\Controller;
 
+use Mail;
 use Auth;
 use Storage;
 use Session;
 use App\SampleCode;
+use App\Mail\SampleCodeMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
@@ -57,6 +59,7 @@ class SampleCodeController extends Controller
         {
             $data = json_decode($request->input('data'), true);
             $checked_ids = $request->input('checked');
+            $emails_sent = 0; 
 
             // Add this data as inspection items to the inspection where the corresponding sample code has been generated
             foreach ($data as $checked_id => $inspection_items) // $inspection_items is array of ['cat_id'=>value]
@@ -70,11 +73,12 @@ class SampleCodeController extends Controller
                     // look up inspection
                     $inspection_id = InspectionItem::where('category_id', $sample_code_id)->where('value', $sample_code)->value('inspection_id');
                     $inspection    = Inspection::find($inspection_id);
-
+                    
                     if ($inspection)
                     {
                         $inspection_cnt++;
-                        
+                        $items_changed = 0;
+
                         foreach ($inspection_items as $category_id => $value)
                         {
                             $inspection_item_exists = $inspection->items()->where('category_id', $category_id);
@@ -96,12 +100,39 @@ class SampleCodeController extends Controller
                                 'value'         => $value,
                             ];
                             InspectionItem::create($itemData);
+                            $items_changed++;
                         }
+
+                        // send e-mail to user
+                        if ($items_changed > 0 && $inspection->users()->count() > 0)
+                        {
+                            $hive_id   = null;
+                            $hive_name = null;
+
+                            if (isset($inspection->hives) && $inspection->hives->count() > 0)
+                            {
+                                $hive      = $inspection->hives->first();
+                                $hive_id   = $hive->id;
+                                $hive_name = $hive->name;
+                            }
+
+                            $link = null;
+                            if (isset($hive_id))
+                                $link = "hives/$hive_id/inspections?search=id%3D$inspection_id";
+
+                            foreach ($inspection->users as $u) 
+                            {
+                                Log::debug("Sample result upload for code $sample_code sending email to user $u->email");
+                                Mail::to($u->email)->send(new SampleCodeMail($u->name, $sample_code, $hive_name, $link));
+                                $emails_sent++;
+                            }
+                        }
+
                     }
                 }
             }
             // show result
-            $msg = "Added data for $inspection_cnt inspections. Added $items_added, replaced $items_replaced inspection items in total.";
+            $msg = "Added data for $inspection_cnt inspections. Added $items_added, replaced $items_replaced inspection items in total. Sent $emails_sent data upload notification emails to the creators of the sample codes.";
             if ($inspection_cnt > 0 && $items_added + $items_replaced > 0)
             {
                 $res  = 'success';
@@ -172,7 +203,7 @@ class SampleCodeController extends Controller
                         {
                             if (in_array($col_name, $col_names_valid)) // valid cat_id col:  $col_names_valid = [0=>"B", 1=>"C", etc]
                             {
-                                $value = $cell->getValue(); 
+                                $value = trim($cell->getValue()); // remove whitespace from beginning and end of the string
                                 $cat_id= $cat_ids_valid[$col_name];
 
                                 if (isset($value))
@@ -196,7 +227,7 @@ class SampleCodeController extends Controller
                                     switch($input_type)
                                     {
                                         case 'sample_code':
-                                            $corrected_value = strtoupper(substr($value, 0, 8));
+                                            $corrected_value = strtoupper(substr(str_replace(' ', '', $value), 0, 8));
                                             break;
                                         case 'date':
                                             if (is_numeric($value))

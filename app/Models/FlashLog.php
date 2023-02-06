@@ -748,15 +748,17 @@ class FlashLog extends Model
                 $match_last = end($matches_arr); // take last match
                 //die(print_r($match));
 
-                $match_first_time   = $match_first['db_sec'];
-                $match_last_time    = $match_last['db_sec'];
-                $match_total_count  = count($matches_arr);
-                $sec_diff_per_match = ($match_last_time - $match_first_time) / $match_total_count;
+                $match_first_time   = $match_first['db_sec'];// 1620339094
+                $match_last_time    = $match_last['db_sec']; // 1620356195
+                $match_total_count  = count($matches_arr);   // 20 
+                $sec_diff_per_match = ($match_last_time - $match_first_time) / ($match_total_count-1); // 900.0526315789 sec in between
+                $max_sec_deviation  = round($interval_sec / 10); // max 90 sec for 900 sec interval
 
-                if (abs($sec_diff_per_match - $interval_sec) > 120) // deviation is too far off
-                    $sec_diff_per_index = $interval_sec;
-                else
+                // Set the difference per time index based on the deviation in the matches found (if smaller than $max_sec_deviation), or set it on the set interval
+                if (abs($sec_diff_per_match - $interval_sec) < $max_sec_deviation) // deviation is within $max_sec_deviation (10%), so take $sec_diff_per_match
                     $sec_diff_per_index = $sec_diff_per_match;
+                else
+                    $sec_diff_per_index = $interval_sec;
 
                 $matches_display    = array_slice($matches_arr, 0, $matches_min);
                 $matches['matches'] = $matches_display;
@@ -770,7 +772,7 @@ class FlashLog extends Model
                     // A match is found
                     $has_matches = true;
                     if ($show)
-                        $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$interval, 'transmission_ratio'=>$on['measurement_transmission_ratio'], 'index_start'=>$block['index_start'], 'index_end'=>$block['index_end'], 'time_start'=>$block['time_start'], 'time_end'=>$block['time_end'], 'setCount'=>$block['setCount'], 'matches'=>$matches, 'dbCount'=>$block['dbCount'], 'interval_sec_db'=>$sec_diff_per_index, 'match_first_db_sec'=>$match_first_time, 'match_last_db_sec'=>$match_last_time, 'match_total_count'=>$match_total_count, 'sec_diff_per_match'=>$sec_diff_per_match, 'interval_sec'=>$interval_sec];
+                        $log[] = ['block'=> $i, 'block_i'=>$block_index, 'start_i'=>$start_index, 'end_i'=>$end_index, 'duration_hours'=>$duration_hrs, 'fl_i'=>$fl_index, 'db_time'=>$db_time, 'fw_version'=>$on['firmware_version'], 'interval_min'=>$interval, 'transmission_ratio'=>$on['measurement_transmission_ratio'], 'index_start'=>$block['index_start'], 'index_end'=>$block['index_end'], 'time_start'=>$block['time_start'], 'time_end'=>$block['time_end'], 'setCount'=>$block['setCount'], 'matches'=>$matches, 'dbCount'=>$block['dbCount'], 'sec_diff_per_index'=>$sec_diff_per_index, 'match_first_db_sec'=>$match_first_time, 'match_last_db_sec'=>$match_last_time, 'match_total_count'=>$match_total_count, 'sec_diff_per_match'=>$sec_diff_per_match, 'interval_sec'=>$interval_sec];
 
                     $setCount += $block['setCount'];
                     $db_time  = $block['time_end'];
@@ -826,7 +828,7 @@ class FlashLog extends Model
         if (isset($db_records_override))
             $db_records = $db_records_override;
 
-        if ($flashlog == null || count($flashlog) < $matches_min)
+        if ($flashlog == null || count($flashlog) < $matches_min) // reject stoo small blocks of data
             return null;
 
         $fl_index = 0;

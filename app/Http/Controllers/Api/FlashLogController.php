@@ -508,6 +508,7 @@ class FlashLogController extends Controller
                             if ($delete)
                             {
                                 $data_influx_deleted= false;
+                                $data_delete_errors = [];
                                 $data_deleted       = 'no_data_to_delete';
                                 $delete_count_query = 'SELECT COUNT("bv") AS "count" FROM "sensors" WHERE "from_flashlog" = \'1\' AND '.$device->influxWhereKeys().' AND time >= \''.$block_start_t.'\' AND time <= \''.$block_end_t.'\'';
                                 $delete_count       = Device::getInfluxQuery($delete_count_query, 'flashlog');
@@ -521,16 +522,20 @@ class FlashLogController extends Controller
                                     // Delete for each key separately since OR statements do not work in DELETE statements
                                     foreach ($device->allKeys() as $device_key) 
                                     {
+                                        $delete_query = 'DELETE FROM "sensors" WHERE "key" = \''.$device_key.'\' AND "from_flashlog" = \'1\' AND time >= \''.$block_start_t.'\' AND time <= \''.$block_end_t.'\'';
                                         try
                                         {
-                                            $delete_query = 'DELETE FROM "sensors" WHERE "from_flashlog"=\'1\' AND "key" = \''.$device_key.'\' AND time >= \''.$block_start_t.'\' AND time <= \''.$block_end_t.'\'';
                                             $data_deleted = $this->client::query($delete_query);
                                             $data_influx_deleted = true;
-                                            Log::debug("delete all from_flashlog='1' values for key=$device_key between $block_start_t and $block_end_t");
+                                            Log::debug($delete_query);
                                         }
                                         catch(\Exception $e)
                                         {
+                                            $data_delete_errors[] = $e->getMessage();
                                             Log::error($e->getMessage());
+                                            Log::error($delete_query);
+                                            $delete_count_sum = 0;
+                                            $deleted_days = 0;
                                         }
                                     }
                                     
@@ -547,9 +552,14 @@ class FlashLogController extends Controller
                                     }
                                 }
                                 
-                                $out = ['data_deleted'=>$data_influx_deleted, 'deleted_measurements'=>$delete_count_sum, 'deleted_days'=>$deleted_days];
+                                if (count($data_delete_errors) > 0)
+                                    $out = ['data_deleted'=>$data_influx_deleted, 'deleted_measurements'=>$delete_count_sum, 'deleted_days'=>$deleted_days, 'errors'=>$data_delete_errors];
+                                else
+                                    $out = ['data_deleted'=>$data_influx_deleted, 'deleted_measurements'=>$delete_count_sum, 'deleted_days'=>$deleted_days];
 
-                                Cache::forget($flashlog->getLogCacheName(true, true, $matches_min, $match_props, $db_records)); // remove cached result, because import has changed it
+                                if ($data_influx_deleted)
+                                    Cache::forget($flashlog->getLogCacheName(true, true, $matches_min, $match_props, $db_records)); // remove cached result, because import has changed it
+                                
                                 Log::debug("delete finished: ".json_encode($out)); 
 
                             }
@@ -779,7 +789,7 @@ class FlashLogController extends Controller
                                     {
                                         $out['block_data_match_percentage']  = 0;
                                         $out['block_data_flashlog_sec_diff'] = '?';
-                                        $out['block_data_match_errors']      = 'Data not matched for >30 days';
+                                        $out['block_data_match_errors']      = 'Cannot calculate matches for periods >30 days';
                                         $out['block_data_diff_percentage']   = 0;
                                         $out['block_data_match_count']       = 0;
                                     }
