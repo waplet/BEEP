@@ -272,6 +272,11 @@ class AlertRule extends Model
                         $calc = $value;
                     }
 
+                    if (!is_float($calc)) {
+                        Log::debug('[W] Non-float value received; ' . print_r($calc, true));
+                        continue;
+                    }
+
                     if (is_nan($calc))
                         continue;
 
