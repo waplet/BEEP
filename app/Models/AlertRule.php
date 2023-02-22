@@ -273,7 +273,7 @@ class AlertRule extends Model
                     }
 
                     if (!is_float($calc)) {
-                        Log::debug('[W] Non-float value received; ' . print_r($calc, true));
+                        Log::debug('[W] Non-float value received; ' . print_r($calc, true) . ';' . gettype($calc));
                         continue;
                     }
 
