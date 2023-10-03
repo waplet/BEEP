@@ -57,7 +57,7 @@ class PollihubTTNDownlinkService
             'POST',
             str_replace(
                 ['{appId}', '{webhookId}', '{deviceId}'],
-                [$this->appId, $this->webhookId, $deviceId],
+                [$this->appId, $this->webhookId, mb_strtolower($deviceId)],
                 $this->url
             ),
             [
